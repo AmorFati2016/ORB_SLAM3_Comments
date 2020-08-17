@@ -47,6 +47,8 @@ int main(int argc, char **argv)
     int nImages = vstrImageFilenames.size();
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
+    // argv[1] = path_to_vocabulary
+    // argv[2] = path_to_settings
     ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR,true);
 
     // Vector for tracking time statistics
