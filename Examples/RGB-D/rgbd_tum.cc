@@ -105,12 +105,14 @@ int main(int argc, char **argv)
         vTimesTrack[ni]=ttrack;
 
         // Wait to load the next frame
+        // 特殊处理第一帧(ni == 0)和最后一帧(ni==nImages - 1)
         double T=0;
         if(ni<nImages-1)
             T = vTimestamps[ni+1]-tframe;
         else if(ni>0)
             T = tframe-vTimestamps[ni-1];
 
+        // 如果当前帧已经处理完了，还没有到下一帧的时间戳，就再等等
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
     }

@@ -53,6 +53,21 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     cout << "Input sensor was set to: ";
 
+/* 1. 检查SLAM系统传感器初始化类型
+*  2. 检查传感器配置文件，也就是相机标定参数等
+*  3. 实例化ORB词典对象，并加载ORB词典
+*  4. 根据ORB词典实例对象，创建关键帧DataBase
+*  5. 创建Altas，也就是多地图系统
+*  6. IMU传感器初始化设置，如果需要的话.也就是将Map.cc中的mbIsInertial变量设置为true
+*  7. 利用Atlas创建Drawer.包括FrameDrawer和MapDrawer
+*  8. 初始化Tracking线程
+*  9. 初始化局部地图LocalMapping线程，并加载
+*  10. 初始化闭环LoopClosing线程，并加载
+*  11. 初始化用户可视化线程，并加载
+*  12. 将上述实例化的对象指针，传入需要用到的线程中
+*/
+
+    //====================== Step 1. 检查SLAM系统传感器初始化类型
     if(mSensor==MONOCULAR)
         cout << "Monocular" << endl;
     else if(mSensor==STEREO)
@@ -64,7 +79,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     else if(mSensor==IMU_STEREO)
         cout << "Stereo-Inertial" << endl;
 
-    //Check settings file
+    //====================== Step 2. 检查传感器配置文件，也就是相机标定参数等
     cv::FileStorage fsSettings(strSettingsFile.c_str(), cv::FileStorage::READ);
     if(!fsSettings.isOpened())
     {
@@ -74,8 +89,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     bool loadedAtlas = false;
 
-    //----
-    //Load ORB Vocabulary
+    //====================== Step 3. 实例化ORB词典对象，并加载ORB词典
     cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
 
     mpVocabulary = new ORBVocabulary();
@@ -88,10 +102,10 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     }
     cout << "Vocabulary loaded!" << endl << endl;
 
-    //Create KeyFrame Database
+    //====================== Step 4. 根据ORB词典实例对象，创建关键帧DataBase
     mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
 
-    //Create the Atlas
+    //====================== Step 5. 创建Altas，也就是多地图系统
     //mpMap = new Map();
     mpAtlas = new Atlas(0);
     //----
@@ -163,19 +177,23 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     }*/
 
 
+    //====================== Step 6. IMU传感器初始化设置，如果需要的话.也就是将Map.cc中的mbIsInertial变量设置为true
     if (mSensor==IMU_STEREO || mSensor==IMU_MONOCULAR)
         mpAtlas->SetInertialSensor();
 
+    //====================== Step 7. 利用Atlas创建Drawer.包括FrameDrawer和MapDrawer
     //Create Drawers. These are used by the Viewer
     mpFrameDrawer = new FrameDrawer(mpAtlas);
     mpMapDrawer = new MapDrawer(mpAtlas, strSettingsFile);
 
+    //====================== Step 8. 初始化Tracking线程
     //Initialize the Tracking thread
     //(it will live in the main thread of execution, the one that called this constructor)
     cout << "Seq. Name: " << strSequence << endl;
     mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
                              mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, strSequence);
 
+    //====================== Step 9. 初始化局部地图LocalMapping线程，并加载
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor==MONOCULAR || mSensor==IMU_MONOCULAR, mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO, strSequence);
     mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run,mpLocalMapper);
@@ -189,11 +207,13 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     else
         mpLocalMapper->mbFarPoints = false;
 
+    //====================== Step 10. 初始化闭环LoopClosing线程，并加载
     //Initialize the Loop Closing thread and launch
     // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
     mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
     mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
+    //====================== Step 11. 初始化用户可视化线程，并加载
     //Initialize the Viewer thread and launch
     if(bUseViewer)
     {
@@ -204,6 +224,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         mpViewer->both = mpFrameDrawer->both;
     }
 
+    //====================== Step 12. 将上述实例化的对象指针，传入需要用到的线程中
     //Set pointers between threads
     mpTracker->SetLocalMapper(mpLocalMapper);
     mpTracker->SetLoopClosing(mpLoopCloser);
