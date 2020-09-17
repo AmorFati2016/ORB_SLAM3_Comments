@@ -99,8 +99,8 @@ public:
 public:
 
     /* @brief Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
-    * @strVocFile
-    * @strSettingsFile
+    * @strVocFile 
+    * @strSettingsFile 
     * @sensor
     * @bUseViewer
     * @initFr

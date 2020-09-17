@@ -242,17 +242,26 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
 cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
 {
+/* 1. 检查SLAM系统传感器类型，如果不是 STEREO 或者 IMU_STEREO 则退出；
+*  2. 检查是否打开或关闭定位模式状态
+*  3. 检查重置状态，也就是重置Track线程或者Activate Map
+*  4. 如果是IMU_STEREO传感器，需要加载IMU数据
+*  5. Track 线程计算当前帧姿态参数
+*  6. 更新状态参数和数据
+*/
+    // 1. 检查SLAM系统传感器类型，如果不是 STEREO 或者 IMU_STEREO 则退出；
     if(mSensor!=STEREO && mSensor!=IMU_STEREO)
     {
         cerr << "ERROR: you called TrackStereo but input sensor was not set to Stereo nor Stereo-Inertial." << endl;
         exit(-1);
-    }   
+    }
 
-    // Check mode change
+    // 2. 检查是否打开或关闭定位模式状态
     {
         unique_lock<mutex> lock(mMutexMode);
         if(mbActivateLocalizationMode)
         {
+            // 如果是定位模式，请求LocalMapper线程停止建图
             mpLocalMapper->RequestStop();
 
             // Wait until Local Mapping has effectively stopped
@@ -261,9 +270,12 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
                 usleep(1000);
             }
 
+            // Track线程模式切换为只做Tracking
             mpTracker->InformOnlyTracking(true);
             mbActivateLocalizationMode = false;
         }
+
+        // 如果关闭定位模式，则打开同时定位和建图
         if(mbDeactivateLocalizationMode)
         {
             mpTracker->InformOnlyTracking(false);
@@ -272,7 +284,7 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
         }
     }
 
-    // Check reset
+    // 3. 检查重置状态，也就是重置Track线程或者Activate Map
     {
         unique_lock<mutex> lock(mMutexReset);
         if(mbReset)
@@ -289,15 +301,15 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
         }
     }
 
+    // 4. 如果是IMU_STEREO传感器，需要加载IMU数据
     if (mSensor == System::IMU_STEREO)
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
-    // std::cout << "start GrabImageStereo" << std::endl;
+    // 5. Track 线程计算当前帧姿态参数
     cv::Mat Tcw = mpTracker->GrabImageStereo(imLeft,imRight,timestamp,filename);
 
-    // std::cout << "out grabber" << std::endl;
-
+    // 6. 更新状态参数和数据
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
@@ -308,17 +320,26 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
 
 cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp, string filename)
 {
+/* 1. 检查SLAM系统传感器类型，如果不是 RGBD 或者 则退出；
+*  2. 检查是否打开或关闭定位模式状态
+*  3. 检查重置状态，也就是重置Track线程或者Activate Map
+*  4. Track 线程计算当前帧姿态参数
+*  5. 更新状态参数和数据
+*/
+
+    // 1. 检查SLAM系统传感器类型，如果不是 RGBD 或者 则退出
     if(mSensor!=RGBD)
     {
         cerr << "ERROR: you called TrackRGBD but input sensor was not set to RGBD." << endl;
         exit(-1);
     }    
 
-    // Check mode change
+    // 2. 检查是否打开或关闭定位模式状态
     {
         unique_lock<mutex> lock(mMutexMode);
         if(mbActivateLocalizationMode)
         {
+            // 如果是定位模式，请求LocalMapper线程停止建图
             mpLocalMapper->RequestStop();
 
             // Wait until Local Mapping has effectively stopped
@@ -327,9 +348,12 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
                 usleep(1000);
             }
 
+            // Track线程模式切换为只做Tracking
             mpTracker->InformOnlyTracking(true);
             mbActivateLocalizationMode = false;
         }
+
+        // 如果关闭定位模式，则打开同时定位和建图
         if(mbDeactivateLocalizationMode)
         {
             mpTracker->InformOnlyTracking(false);
@@ -338,7 +362,7 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
         }
     }
 
-    // Check reset
+    // 3. 检查重置状态，也就是重置Track线程或者Activate Map
     {
         unique_lock<mutex> lock(mMutexReset);
         if(mbReset)
@@ -354,9 +378,10 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
         }
     }
 
-
+    // 4. Track 线程计算当前帧姿态参数
     cv::Mat Tcw = mpTracker->GrabImageRGBD(im,depthmap,timestamp,filename);
 
+    // 5. 更新状态参数和数据
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
@@ -366,17 +391,27 @@ cv::Mat System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const doub
 
 cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
 {
+/* 1. 检查SLAM系统传感器类型，如果不是 MONOCULAR, IMU_MONOCULAR则退出；
+*  2. 检查是否打开或关闭定位模式状态
+*  3. 检查重置状态，也就是重置Track线程或者Activate Map
+*  4. 如果是IMU_MONOCULAR传感器，需要加载IMU数据
+*  5. Track 线程计算当前帧姿态参数
+*  6. 更新状态参数和数据
+*/
+
+    // 1. 检查SLAM系统传感器类型，如果不是 MONOCULAR, IMU_MONOCULAR则退出；
     if(mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR)
     {
         cerr << "ERROR: you called TrackMonocular but input sensor was not set to Monocular nor Monocular-Inertial." << endl;
         exit(-1);
     }
 
-    // Check mode change
+   // 2. 检查是否打开或关闭定位模式状态
     {
         unique_lock<mutex> lock(mMutexMode);
         if(mbActivateLocalizationMode)
         {
+            // 如果是定位模式，请求LocalMapper线程停止建图
             mpLocalMapper->RequestStop();
 
             // Wait until Local Mapping has effectively stopped
@@ -385,9 +420,12 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
                 usleep(1000);
             }
 
+            // Track线程模式切换为只做Tracking
             mpTracker->InformOnlyTracking(true);
             mbActivateLocalizationMode = false;
         }
+
+        // 如果关闭定位模式，则打开同时定位和建图
         if(mbDeactivateLocalizationMode)
         {
             mpTracker->InformOnlyTracking(false);
@@ -396,7 +434,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         }
     }
 
-    // Check reset
+    // 3. 检查重置状态，也就是重置Track线程或者Activate Map
     {
         unique_lock<mutex> lock(mMutexReset);
         if(mbReset)
@@ -413,10 +451,12 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         }
     }
 
+    // 4. 如果是IMU_MONOCULAR传感器，需要加载IMU数据
     if (mSensor == System::IMU_MONOCULAR)
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
+    // 5. Track 线程计算当前帧姿态参数
     cv::Mat Tcw = mpTracker->GrabImageMonocular(im,timestamp,filename);
 
     /*if(mpLocalMapper->mbNewInit)
@@ -437,6 +477,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         }
     }*/
 
+    // 6. 更新状态参数和数据
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
