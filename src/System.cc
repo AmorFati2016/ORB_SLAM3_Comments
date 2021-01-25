@@ -256,7 +256,7 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
         exit(-1);
     }
 
-    // 2. 检查是否打开或关闭定位模式状态
+    // 2. 检查是否打开或关闭定位模式状态,默认false
     {
         unique_lock<mutex> lock(mMutexMode);
         if(mbActivateLocalizationMode)
@@ -275,7 +275,7 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
             mbActivateLocalizationMode = false;
         }
 
-        // 如果关闭定位模式，则打开同时定位和建图
+        // 如果关闭定位模式，则打开同时定位和建图，默认false
         if(mbDeactivateLocalizationMode)
         {
             mpTracker->InformOnlyTracking(false);
@@ -284,7 +284,7 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
         }
     }
 
-    // 3. 检查重置状态，也就是重置Track线程或者Activate Map
+    // 3. 检查重置状态，也就是重置Track线程或者Activate Map， 默认false
     {
         unique_lock<mutex> lock(mMutexReset);
         if(mbReset)
@@ -311,8 +311,26 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
 
     // 6. 更新状态参数和数据
     unique_lock<mutex> lock2(mMutexState);
+
+
+    /* Tracking states
+    enum eTrackingState{
+        SYSTEM_NOT_READY=-1,
+        NO_IMAGES_YET=0,
+        NOT_INITIALIZED=1,
+        OK=2,
+        RECENTLY_LOST=3,
+        LOST=4,
+        OK_KLT=5
+    };
+    */
     mTrackingState = mpTracker->mState;
+
+    // std::vector<MapPoint*>
+    // Corresponding stereo coordinate and depth for each keypoint.
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
+
+    // Vector of keypoints (original for visualization) undistorted
     mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
 
     return Tcw;

@@ -357,7 +357,10 @@ void Tracking::SetStepByStep(bool bSet)
 
 
 
-cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp, string filename)
+cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft,
+                                  const cv::Mat &imRectRight,
+                                  const double &timestamp,
+                                  string filename)
 {
     mImGray = imRectLeft;
     cv::Mat imGrayRight = imRectRight;
@@ -390,6 +393,8 @@ cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRe
         }
     }
 
+    // mThDepth = mbf*(float)fSettings["ThDepth"]/fx;
+    // mpORBextractorLeft = new ORBextractor(nFeatures,fScaleFactor,nLevels,fIniThFAST,fMinThFAST); col 206
     if (mSensor == System::STEREO && !mpCamera2)
         mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera);
     else if(mSensor == System::STEREO && mpCamera2)
@@ -847,13 +852,15 @@ void Tracking::Track()
     mTime_NewKF_Dec = 0;
 #endif
 
+    // 如果是 StepByStep = True，那么每次进入Track就延迟500微秒
     if (bStepByStep)
     {
         while(!mbStep)
-            usleep(500);
-        mbStep = false;
+            usleep(500);  // usleep()函数是把调用该函数的线程挂起一段时间，单位是微秒（百万分之一秒）
+        mbStep = false;  // 更新状态，保证下次继续延迟
     }
 
+    // 调用 ResetActiveMap 重置活动地图。当初始化时间 <10.f && 运动 dist<0.02，mbBadImu = True
     if(mpLocalMapper->mbBadImu)
     {
         cout << "TRACK: Reset map because local mapper set the bad imu flag " << endl;
@@ -863,8 +870,12 @@ void Tracking::Track()
 
     Map* pCurrentMap = mpAtlas->GetCurrentMap();
 
+    // 当输入帧数据异常时，在以下两种情况退出Track函数
+    // a. 当前时间戳 < 上一帧数据时间戳， 时间异常
+    // b. 当前时间戳 > 上一帧数据时间戳 + 1， 也就是跳帧
     if(mState!=NO_IMAGES_YET)
     {
+        // 如果时间戳不符合逻辑
         if(mLastFrame.mTimeStamp>mCurrentFrame.mTimeStamp)
         {
             cerr << "ERROR: Frame with a timestamp older than previous frame detected!" << endl;
@@ -873,6 +884,7 @@ void Tracking::Track()
             CreateMapInAtlas();
             return;
         }
+        // 如果当前时间戳 > 上一帧数据时间戳 + 1
         else if(mCurrentFrame.mTimeStamp>mLastFrame.mTimeStamp+1.0)
         {
             cout << "id last: " << mLastFrame.mnId << "    id curr: " << mCurrentFrame.mnId << endl;
@@ -906,6 +918,7 @@ void Tracking::Track()
     if ((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO) && mpLastKeyFrame)
         mCurrentFrame.SetNewBias(mpLastKeyFrame->GetImuBias());
 
+    // 如果没有 Image 数据， 则将状态更新为为初始化
     if(mState==NO_IMAGES_YET)
     {
         mState = NOT_INITIALIZED;
@@ -946,6 +959,7 @@ void Tracking::Track()
     //std::cout << "T2" << std::endl;
 
 
+    // 如果系统还未进行初始化，则分类进行初始化
     if(mState==NOT_INITIALIZED)
     {
         if(mSensor==System::STEREO || mSensor==System::RGBD || mSensor==System::IMU_STEREO)
@@ -1336,6 +1350,7 @@ void Tracking::Track()
 
 
 
+    // 保存或设置当前帧姿态数据，如果状态OK，或者是 RECENTLY_LOST
     if(mState==OK || mState==RECENTLY_LOST)
     {
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
@@ -1362,6 +1377,7 @@ void Tracking::Track()
 
 void Tracking::StereoInitialization()
 {
+    // N = mvKeys.size();
     if(mCurrentFrame.N>500)
     {
         if (mSensor == System::IMU_STEREO)
